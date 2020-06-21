@@ -1,95 +1,213 @@
 ---
 # defaults file for ansible-es-metricbeat
 
-es_metricbeat:
-  # The location for configuration files.
-  config_dir: /etc/metricbeat
+# Defines whether or not metricbeat is configured
+es_metricbeat_config: false
 
-  # Defines if metricbeat should be configured
-  config: true
-
-  # The location for persistent data files.
-  data_dir: /var/lib/metricbeat
-
-  elasticsearch_host: http://127.0.0.1:9200
-
-  # Home of the metricbeat installation.
-  home_dir: /usr/share/metricbeat
-
-  # The location for the logs created by metricbeat
-  log_dir: /var/log/metricbeat
-
-  # Define metricbeat Major Release
-  major_version: 5.x
-
-  # Define metricbeat Minor Release
-  minor_version: 5.6.4
-
+# Define metricbeat config per
+# https://www.elastic.co/guide/en/beats/metricbeat/current/configuring-howto-metricbeat.html
+# The config here will be automatically converted to proper YAML for metricbeat
+# /etc/metricbeat/metricbeat.yml using the Jinja2 template.
 es_metricbeat_configuration:
-  metricbeat.config.modules:
+  metricbeat:
+    config:
+      modules:
+        path: ${path.config}/modules.d/*.yml
+        reload:
+          enabled: false
+    modules:
+      - module: beat
+        enabled: true
+        metricsets:
+          - stats
+          - state
+        period: 10s
+        hosts:
+          - http://localhost:5066
 
-    # Glob pattern for configuration reloading
-    path: ${path.config}/conf.d/*.yml
+      - module: consul
+        enabled: false
+        metricsets:
+          - agent
+        period: 10s
+        hosts:
+          - localhost:8500
 
-    # Period on which files under path should be checked for chagnes
-    reload.period: 10s
+      - module: docker
+        enabled: false
+        metricsets:
+          - container
+          - cpu
+          - diskio
+          - event
+          - healthcheck
+          - info
+          #- image
+          - memory
+          - network
+        hosts:
+          - unix:///var/run/docker.sock
+        period: 10s
 
-    # Set to true to enable config reloading
-    reload.enabled: false
+      - module: elasticsearch
+        enabled: false
+        metricsets:
+          - node
+          - node_stats
+          #- index
+          #- index_recovery
+          #- index_summary
+          #- shard
+          #- ml_job
+        period: 10s
+        hosts:
+          - http://localhost:9200
 
-  metricbeat.modules:
-    system:
-      cpu_ticks: false
+      - module: mysql
+        enabled: false
+        metricsets:
+          - "status"
+        #  - "galera_status"
+        period: 10s
+
+        # Host DSN should be defined as "user:pass@tcp(127.0.0.1:3306)/"
+        # or "unix(/var/lib/mysql/mysql.sock)/",
+        # or another DSN format supported by <https://github.com/Go-SQL-Driver/MySQL/>.
+        # The username and password can either be set in the DSN or using the username
+        # and password config options. Those specified in the DSN take precedence.
+        hosts:
+          - unix(/var/lib/mysql/mysql.sock)/
+
+      - module: nginx
+        enabled: false
+        metricsets:
+          - stubstatus
+        period: 10s
+
+        # Nginx hosts
+        hosts:
+          - http://127.0.0.1
+
+        # Path to server status. Default nginx_status
+        server_status_path: "nginx_status"
+
+      - module: prometheus
+        enabled: false
+        period: 10s
+        metricsets:
+          - collector
+        hosts:
+          - localhost:9090
+        metrics_path: /metrics
+
+      - module: system
+        enabled: true
+        metricsets:
+          - cpu # CPU usage
+          - load # CPU load averages
+          - memory # Memory usage
+          - network # Network IO
+          - process # Per process metrics
+          - process_summary # Process summary
+          - uptime # System Uptime
+          - socket_summary # Socket summary
+          #- core           # Per CPU core usage
+          #- diskio         # Disk IO
+          #- filesystem     # File system usage for each mountpoint
+          #- fsstat         # File system summary metrics
+          #- raid           # Raid
+          #- socket         # Sockets and connection info (linux only)
+          #- service        # systemd service information
+        period: 10s
+        processes:
+          - ".*"
+
+        # Configure the metric types that are included by these metricsets.
+        cpu:
+          metrics:
+            - percentages
+            - normalized_percentages
+        core:
+          metrics:
+            - percentages
+  output:
+    elasticsearch:
       enabled: true
-      metricsets:
-        # - core
-        - cpu
-        # - diskio
-        - load
-        - memory
-        - network
-        - process
-        - process_summary
-        # - socket
-      period: 10s
-      processes: ['.*']
+      # The list of Elasticsearch nodes to connect to. The events are
+      # distributed to these nodes in round robin order. If one node becomes
+      # unreachable, the event is automatically sent to another node.
+      hosts:
+        - localhost:9200
+      # The name of the protocol Elasticsearch is reachable on.
+      # The options are: http or https.
+      protocol: http
 
-  output.elasticsearch:
-    # Boolean flag to enable or disable the output module.
+    kafka:
+      enabled: false
+      # The list of Kafka broker addresses from where to fetch the cluster metadata. The cluster metadata contain the
+      # actual Kafka brokers events are published to.
+      hosts:
+        []
+        # - kafka-01:9092
+        # - kafka-02:9092
+        # - kafka-03:9092
+
+    logstash:
+      enabled: false
+      # The list of known Logstash servers to connect to. If load balancing is
+      # disabled, but multiple hosts are configured, one host is selected
+      # randomly (there is no precedence). If one host becomes unreachable,
+      # another one is selected randomly.
+      hosts:
+        []
+        # - localhost:5044
+      # If set to true and multiple Logstash hosts are configured, the output
+      # plugin load balances published events onto all Logstash hosts.
+      loadbalance: false
+
+    redis:
+      enabled: false
+      # The list of Redis servers to connect to. If load balancing is enabled,
+      # the events are distributed to the servers in the list. If one server
+      # becomes unreachable, the events are distributed to the reachable
+      # servers only.
+      hosts:
+        []
+        # - localhost
+      # If set to true and multiple hosts or workers are configured, the output
+      # plugin load balances published events onto all Redis hosts.
+      loadbalance: true
+
+  processors:
+    - add_cloud_metadata: ~
+    - add_docker_metadata: ~
+    - add_host_metadata: ~
+    - add_kubernetes_metadata: ~
+
+  setup:
+    # If this option is set to true, metricbeat loads the sample Kibana
+    # dashboards from the local kibana directory in the home path of the
+    # metricbeat installation
+    dashboards:
+      enabled: false
+
+    template:
+      # Set to false to disable template loading. If set this to false,
+      # you must load the template manually.
+      enabled: true
+
+    kibana:
+      host: localhost:5601
+      protocol: http
+
+  timeseries:
+    # Setting this to true (false by default) will add a timeseries.instance
+    # field to all events generated by Metricbeat
     enabled: true
 
-    # Array of hosts to connect to.
-    # Scheme and port can be left out and will be set to the default (http and 9200)
-    # In case you specify and additional path, the scheme is required: http://localhost:9200/path
-    # IPv6 addresses should always be defined as: https://[2001:db8::1]:9200
-    hosts: ["{{ es_metricbeat['elasticsearch_host'] }}"]
+es_metricbeat_repo_key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+es_metricbeat_repo_url: https://artifacts.elastic.co/packages
 
-    # Number of workers per Elasticsearch host.
-    #worker: 1
-
-    # Optional index name. The default is "metricbeat" plus date
-    # and generates [metricbeat-]YYYY.MM.DD keys.
-    #index: "metricbeat-%{+yyyy.MM.dd}"
-
-    # A template is used to set the mapping in Elasticsearch
-    # By default template loading is enabled and the template is loaded.
-    # These settings can be adjusted to load your own template or overwrite existing ones.
-
-    # Set to false to disable template loading.
-    #template.enabled: true
-
-    # Template name. By default the template name is metricbeat.
-    #template.name: "metricbeat"
-
-    # Path to template file
-    #template.path: "${path.config}/metricbeat.template.json"
-
-    # Overwrite existing template
-    # template.overwrite: false
-
-  # setup.kibana:
-  #   host: "10.0.102.102:5601"
-
-es_metricbeat_repo_key: "{{ es_metricbeat_repo_url }}/GPG-KEY-elasticsearch"
-
-es_metricbeat_repo_url: https://artifacts.elastic.co
+# Define major version to install
+es_metricbeat_major_ver: oss-7.x
+es_metricbeat_minor_version: 7.8.0

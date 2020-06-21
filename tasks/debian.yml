@@ -1,24 +1,35 @@
 ---
 - name: debian | Installing Pre-Reqs
   apt:
-    name: apt-transport-https
+    name:
+      - apt-transport-https
+      - gnupg
     state: present
   become: true
+  register: result
+  until: result is successful
 
-- name: debian | Adding Elastic Repo Key
+- name: debian | Copying Elasticsearch GPG Key
+  copy:
+    src: GPG-KEY-elasticsearch
+    dest: /tmp/GPG-KEY-elasticsearch
+
+- name: debian | Adding Elasticsearch GPG Key
   apt_key:
-    url: "{{ es_metricbeat_repo_key }}"
+    file: /tmp/GPG-KEY-elasticsearch
     state: present
   become: true
 
-- name: debian | Adding Elastic Metricbeat Repo
+- name: debian | adding metricbeat repo
   apt_repository:
-    repo: "deb {{ es_metricbeat_repo_url }}/packages/{{ es_metricbeat['major_version'] }}/apt stable main"
+    repo: "{{ 'deb '+es_metricbeat_repo_url+'/'+es_metricbeat_major_ver+'/apt stable main' }}"
     state: present
   become: true
 
-- name: debian | Installing Elastic Metricbeat {{ es_metricbeat['minor_version'] }}
+- name: debian | Installing metricbeat {{ es_metricbeat_minor_version }}
   apt:
-    name: "metricbeat={{ es_metricbeat['minor_version'] }}"
+    name: "{{ 'metricbeat='+es_metricbeat_minor_version|string }}"
     state: present
   become: true
+  register: result
+  until: result is successful

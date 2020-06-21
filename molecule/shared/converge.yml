@@ -1,0 +1,10 @@
+---
+- name: Converge
+  hosts: all
+  vars:
+    # Defines whether or not metricbeat is configured
+    es_metricbeat_config: true
+  tasks:
+    - name: Include ansible-es-metricbeat
+      include_role:
+        name: ansible-es-metricbeat
