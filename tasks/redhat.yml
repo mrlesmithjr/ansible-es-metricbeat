@@ -1,0 +1,30 @@
+---
+- name: redhat | Copying Elasticsearch GPG Key
+  copy:
+    src: GPG-KEY-elasticsearch
+    dest: /tmp/GPG-KEY-elasticsearch
+
+- name: redhat | Adding Elasticsearch GPG Key
+  rpm_key:
+    key: /tmp/GPG-KEY-elasticsearch
+    state: present
+  become: true
+
+- name: redhat | Adding metricbeat Repo
+  yum_repository:
+    baseurl: "{{ es_metricbeat_repo_url+'/'+es_metricbeat_major_ver+'/yum' }}"
+    description: "metricbeat repository for {{ es_metricbeat_major_ver }} packages"
+    enabled: true
+    gpgcheck: true
+    gpgkey: "{{ es_metricbeat_repo_key }}"
+    name: "{{ 'metricbeat-'+es_metricbeat_major_ver }}"
+    state: present
+  become: true
+
+- name: redhat | Installing metricbeat
+  package:
+    name: "{{ 'metricbeat-'+es_metricbeat_minor_version|string }}"
+    state: present
+  become: true
+  register: result
+  until: result is successful
